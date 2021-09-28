@@ -4,4 +4,4 @@
 #define MAX_PT_ENTRIES 32   // Max entries in the Process Table
 
 
-int prompt_cmd(char cmd[MAX_LENGTH], char args[MAX_ARGS][MAX_LENGTH]);
+int prompt_cmd(char cmd[MAX_LENGTH], char *args[MAX_ARGS+1]);
