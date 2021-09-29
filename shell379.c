@@ -14,33 +14,40 @@ int main(int argc, char *argv[])
     char *args[MAX_ARGS+1];
     int total_args;
 
-    /*int num_active_processes = 0;*/
+    int num_active_processes = 0;
 
     /*int user_time = 0;*/
     /*int sys_time = 0;*/
-    /*pid_t pid;*/
+    pid_t pid;
 
     total_args = prompt_cmd(cmd, args);
 
     while (strcmp(cmd, "exit") != 0) {
 
-        /*if ((pid = fork()) < 0)*/
-            /*perror("fork error!");*/
-        /*if (pid == 0) {       // child */
-
-            /*_exit(0);*/
-        /*}*/
+        if (is_shell_cmd(cmd)) {
 
 
 
 
+        } else {
+            if ((pid = fork()) < 0)
+                perror("fork error!");
+            if (pid == 0) {       // child 
+                execvp(cmd, args);
 
+                // child done
+            } else {
+                num_active_processes++;
+                waitpid(pid, NULL, 0);
+
+                num_active_processes--;
+            }
+        }
 
         // freeing strs in args
         if (total_args > 1) {
-            for (i=0; args[i] != NULL; i++) {
-                free(args[i]);
-            }
+            printf("Freeing\n");
+            free_args(args);
         }
 
         total_args = prompt_cmd(cmd, args);
@@ -71,9 +78,12 @@ int prompt_cmd(char cmd[MAX_LENGTH], char *args[MAX_ARGS+1])
     int ch_i = 0;
 
     scanf("%s", cmd);
+    args[arg_i++] = cmd;
 
-    if ((ch = getchar()) == '\n')
-        return 1;       // only the cmd was passed in
+    if ((ch = getchar()) == '\n') {
+        args[arg_i] = NULL;
+        return arg_i;       // only the cmd was passed in
+    }
 
     char *arg = calloc(MAX_LENGTH + 1, sizeof(*arg));
 
@@ -91,9 +101,23 @@ int prompt_cmd(char cmd[MAX_LENGTH], char *args[MAX_ARGS+1])
     args[arg_i++] = arg;
     args[arg_i] = NULL;
 
-    return 1 + arg_i;       // cmd + args
+    return arg_i;       // cmd + args
 }
 
 
+void free_args(char *args[MAX_ARGS+1]) 
+{
+    // does not need to free the first arg
+    for (int i=1; args[i] != NULL; i++) {
+        free(args[i]);
+    }
+}
     
 
+bool is_shell_cmd(char *cmd)
+{
+    char *shell_cmds[] = {"exit", "jobs", "kill", "resume", "sleep", "suspend", "wait"};
+
+    for (
+
+}
