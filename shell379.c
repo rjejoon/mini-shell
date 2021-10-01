@@ -8,7 +8,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
-#include <sys/times.h>
+#include <sys/resource.h>
+
+
+/*#include <sys/times.h>*/
 
 #include "shell379.h"
 
@@ -25,10 +28,18 @@ int main(int argc, char *argv[])
     int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
 
-    struct tms t;	// struct for storing time values 
-    unsigned long freq = sysconf(_SC_CLK_TCK);      // clock frequency
-	uintmax_t start;	// starting tick value  
-	uintmax_t end;		// ending tick value
+    struct rusage usage;    // struct for storing resources used by child process
+    struct timeval user_t;
+    struct timeval sys_t;
+
+    double total_user_time = 0;
+    double total_sys_time = 0;
+
+
+    /*struct tms t;	// struct for storing time values */
+    /*unsigned long freq = sysconf(_SC_CLK_TCK);      // clock frequency*/
+	/*uintmax_t start;	// starting tick value  */
+	/*uintmax_t end;		// ending tick value*/
 
     pid_t pid;
 
@@ -41,9 +52,15 @@ int main(int argc, char *argv[])
         total_args = prompt_cmd(args);
 
         if (is_shell_cmd(args[0])) {
+
             if (strcmp(args[0], "exit") == 0) {
                 free_args(args, total_args);
                 return EXIT_SUCCESS;
+            }
+
+            if (strcmp(args[0], "sleep") == 0) {
+                long int seconds = strtol(args[1], NULL, 10);
+                sleep(seconds);
             }
 
 
@@ -75,16 +92,33 @@ int main(int argc, char *argv[])
                 execvp(filtered_args[0], filtered_args);
             }
             else {
-                if ((start = times(&t)) < 0) {
-                    perror("times error!");
-                }
-                wait(NULL);
-                if ((end = times(&t)) < 0) {
-                    perror("times error!");
-                }
+                /*if ((start = times(&t)) < 0) {*/
+                    /*perror("times error!");*/
+                /*}*/
 
-                printf("elapsed time: %5.2f seconds\n", (double) (end-start)/freq);
-                printf("system time: %ju ticks\n", (uintmax_t) t.tms_stime);
+                getrusage(RUSAGE_CHILDREN, &usage);
+
+                wait(NULL);
+
+                getrusage(RUSAGE_CHILDREN, &usage);
+                user_t = usage.ru_utime;
+                sys_t = usage.ru_stime;
+
+                total_user_time += user_t.tv_sec + ((double) user_t.tv_usec)/1000000;
+                total_sys_time += sys_t.tv_sec + ((double) sys_t.tv_usec)/1000000;
+
+                printf("\n");
+                printf("User time: %f seconds\n", total_user_time);
+                printf("Sys time: %f seconds\n", total_sys_time);
+                printf("\n");
+
+
+                /*if ((end = times(&t)) < 0) {*/
+                    /*perror("times error!");*/
+                /*}*/
+
+                /*printf("elapsed time: %5.2f seconds\n", (double) (end-start)/freq);*/
+                /*printf("system time: %5.2f seconds\n", t.tms_stime);*/
 
                 if (close(pipe_fd[0]) < 0)
                     perror("Pipe close error");
