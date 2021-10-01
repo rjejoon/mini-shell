@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
             char *rout_fname = get_output_redirection_fname(args);
 
 
-            // TODO NULL args where rin_fname and rout_fname are positioned
+            // NULL args where rin_fname and rout_fname are positioned
             char *filtered_args[MAX_ARGS+1];
             int i, j;
             for (i=0, j=0; i<total_args; i++) {
@@ -64,8 +64,20 @@ int main(int argc, char *argv[])
                 perror("fork error!");
             else if (pid == 0) {       // child 
 
+                /*FILE *rin_f = fopen(rin_fname, "r");*/
+
+                if (rin_fname != NULL) {
+                    int rin_fd = open(rin_fname, O_RDONLY);
+                    if (rin_fd < 0)
+                        perror("open error!");
+                    if (dup2(rin_fd, 0) < 0)
+                        perror("dup2 error!");
+                    close(rin_fd);
+                }
+
                 if (rout_fname != NULL) {
-                    dup2(pipe_fd[1], STDOUT_FILENO);    // stdout = pipe write end
+                    if (dup2(pipe_fd[1], STDOUT_FILENO) < 0)    // stdout = pipe write end
+                        perror("dup2 error!");
                     /*redirect_output_to(rout_fname, STDOUT_FILENO);*/
                 }
 
@@ -216,7 +228,6 @@ void redirect_output_to(char *rout_fname, int read_fd) {
     }
     if (write(rout_fd, buf, nbytes) < 0 && errno != EINTR) 
         perror("write error!");
-
 
     if (close(rout_fd) < 0)
         perror("Redirected output fd close error");
