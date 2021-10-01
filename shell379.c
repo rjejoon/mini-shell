@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
 
             if (strcmp(args[0], "exit") == 0) {
                 free_args(args, total_args);
+                // TODO must kill all the children processes
                 return EXIT_SUCCESS;
             }
 
@@ -79,11 +80,15 @@ int main(int argc, char *argv[])
                 printf("User time = %6d seconds\n", (int) total_user_time);
                 printf("Sys  time = %6d seconds\n", (int) total_sys_time);
                 printf("\n");
+
+                free_args(args, total_args);
             }
 
             if (strcmp(args[0], "sleep") == 0) {
                 long int seconds = strtol(args[1], NULL, 10);
                 sleep(seconds);
+
+                free_args(args, total_args);
             }
 
 
