@@ -7,10 +7,12 @@
 #define MAX_BUF 100000
 
 
-int prompt_cmd(char cmd[MAX_LENGTH], char *args[MAX_ARGS+1]);
+int prompt_cmd(char *args[MAX_ARGS+1]);
 void free_args(char *args[MAX_ARGS+1], int total_args);
 bool is_shell_cmd(char *cmd);
 void redirect_output_to(char *rout_fname, int pipe_read_fd);
 char *get_input_redirection_fname(char *args[MAX_ARGS+1]);
 char *get_output_redirection_fname(char *args[MAX_ARGS+1]);
-
+void remove_input_output_args(char *filtered_args[MAX_ARGS+1], char *args[MAX_ARGS+1], int total_args);
+void redirect_input(char *rin_fname);
+void redirect_output(char *rout_fname);
