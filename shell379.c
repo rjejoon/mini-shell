@@ -22,17 +22,39 @@ int main(int argc, char *argv[])
     /*int sys_time = 0;*/
     pid_t pid;
 
-    int stdin_copy = dup(0);
+    int stdin_copy = dup(STDIN_FILENO);
+    int stdout_copy = dup(STDOUT_FILENO);
 
+    printf("cmd: ");
+    fflush(stdout);
     total_args = prompt_cmd(cmd, args);
 
 
-    while (strcmp(cmd, "exit") != 0) {
+    while (true) {
+
+        if (strcmp(cmd, "exit") == 0) {
+            break;
+        }
 
         if (is_shell_cmd(cmd)) {
             ;
 
         } else {
+
+            char *rin_fname = get_input_redirection_fname(args);
+            char *rout_fname = get_output_redirection_fname(args);
+
+
+            // TODO NULL args where rin_fname and rout_fname are positioned
+            char *filtered_args[MAX_ARGS+1];
+            int i, j;
+            for (i=0, j=0; i<total_args; i++) {
+                if ( !(args[i][0] == '<' || args[i][0] == '>') ) {
+                    filtered_args[j++] = args[i];
+                } 
+            }
+            filtered_args[j] = NULL;
+            
 
             int pipe_fd[2];
             if (pipe(pipe_fd) < 0)      // create pipe before forking a child
@@ -41,42 +63,50 @@ int main(int argc, char *argv[])
             if ((pid = fork()) < 0)     // fork a child
                 perror("fork error!");
             else if (pid == 0) {       // child 
-                dup2(pipe_fd[1], STDOUT_FILENO);    // stdout = pipe write end
-                close(pipe_fd[0]);          // TODO for now, child won't read
-                close(pipe_fd[1]);          // stdout is still open
-                execvp(cmd, args);
-                // child done
-                
-                fprintf(stderr, "Failed to execute the given command\n");
-                _exit(1);
-            } else {  // parent
-                char buf[MAX_BUF+1];
-                int n;
-                int rout_fd;        // redirected output file description
 
-                num_active_processes++;
-                close(pipe_fd[1]);          // TODO for now, parent won't write
-
-                waitpid(pid, NULL, 0);
-
-                if ((rout_fd = open("redirected_output", O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR ) < 0))
-                    perror("open failed");
+                if (rout_fname != NULL) {
+                    dup2(pipe_fd[1], STDOUT_FILENO);    // stdout = pipe write end
+                    /*redirect_output_to(rout_fname, STDOUT_FILENO);*/
+                }
 
                 if (close(pipe_fd[0]) < 0)
-                    perror("Pipe fd close error");
-                if (close(rout_fd) < 0 )
-                    perror("Redirected output fd close error");
+                    perror("Pipe close error");
+                if (close(pipe_fd[1] < 0))          
+                    perror("Pipe close error");
+
+                if (execvp(cmd, filtered_args) < 0) {  // child done
+                    perror("execvp error!");
+                    _exit(1);
+                }
+
+            } else {  // parent
+
+                num_active_processes++;
+
+                if (rout_fname != NULL)
+                    redirect_output_to(rout_fname, pipe_fd[0]);
+
+                waitpid(pid, NULL, 0);      
+
+                if (close(pipe_fd[0]) < 0)
+                    perror("Pipe close error");
+                if (close(pipe_fd[1] < 0))          
+                    perror("Pipe close error");
 
                 num_active_processes--;
+
             }
         }
 
-        // freeing strs in args
+        // freeing allocated strs in args
         if (total_args > 1) {
-            free_args(args);
+            free_args(args, total_args);
         }
 
         dup2(stdin_copy, STDIN_FILENO);     // restore stdin
+        dup2(stdout_copy, STDOUT_FILENO);   // restore stdout
+        printf("cmd: ");
+        fflush(stdout);
         total_args = prompt_cmd(cmd, args);
     }
 
@@ -107,6 +137,7 @@ int prompt_cmd(char cmd[MAX_LENGTH], char *args[MAX_ARGS+1])
     scanf("%s", cmd);
     args[arg_i++] = cmd;
 
+
     if ((ch = getchar()) == '\n') {
         args[arg_i] = NULL;
         return arg_i;       // only the cmd was passed in
@@ -134,10 +165,10 @@ int prompt_cmd(char cmd[MAX_LENGTH], char *args[MAX_ARGS+1])
 }
 
 
-void free_args(char *args[MAX_ARGS+1]) 
+void free_args(char *args[MAX_ARGS+1], int total_args) 
 {
     // does not need to free the first arg
-    for (int i=1; (i<MAX_ARGS+1) && (args[i] != NULL); i++) {
+    for (int i=1; i<total_args; i++) {
         free(args[i]);
     }
 }
@@ -154,4 +185,61 @@ bool is_shell_cmd(char *cmd)
     }
     return false;
 
+}
+
+void redirect_output_to(char *rout_fname, int read_fd) {
+
+    char buf[MAX_BUF+1];
+    int rout_fd;        // redirected output file description
+    ssize_t nbytes;
+
+    // Write only, set read/write mode, and create if the file does not exist
+    rout_fd = open(rout_fname, O_CREAT|O_WRONLY|O_TRUNC, S_IRUSR|S_IWUSR); 
+    if (rout_fd < 0)
+        perror("open failed");
+
+    /*while ((nbytes = read(read_fd, buf, sizeof(buf))) > 0) {*/
+        /*if (nbytes < 0) {*/
+            /*perror("read error!");*/
+            /*break;*/
+        /*}*/
+        /*if (write(rout_fd, buf, nbytes) < 0 && errno != EINTR) {*/
+            /*perror("write error!");*/
+            /*break;*/
+        /*}*/
+    /*}*/
+
+    // TODO use while loop to read
+    nbytes = read(read_fd, buf, sizeof(buf));
+    if (nbytes < 0) {
+        perror("read error!");
+    }
+    if (write(rout_fd, buf, nbytes) < 0 && errno != EINTR) 
+        perror("write error!");
+
+
+    if (close(rout_fd) < 0)
+        perror("Redirected output fd close error");
+}
+
+char *get_input_redirection_fname(char *args[MAX_ARGS+1])
+{
+    for (int i=1; (i<MAX_ARGS+1) && (args[i] != NULL); i++) {
+        if (args[i][0] == '<') {
+            return args[i] + 1;
+        }
+    }
+
+    return NULL;
+}
+
+char *get_output_redirection_fname(char *args[MAX_ARGS+1])
+{
+    for (int i=1; (i<MAX_ARGS+1) && (args[i] != NULL); i++) {
+        if (args[i][0] == '>') {
+            return args[i] + 1;
+        }
+    }
+
+    return NULL;
 }
