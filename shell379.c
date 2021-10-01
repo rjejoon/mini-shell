@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/times.h>
 
 #include "shell379.h"
 
@@ -19,15 +20,18 @@ int main(int argc, char *argv[])
     char *args[MAX_ARGS+1];
     int total_args;
 
-    int num_active_processes = 0;
+    /*int num_active_processes = 0;*/
 
     int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
 
-    /*int user_time = 0;*/
-    /*int sys_time = 0;*/
+    struct tms t;	// struct for storing time values 
+    unsigned long freq = sysconf(_SC_CLK_TCK);      // clock frequency
+	uintmax_t start;	// starting tick value  
+	uintmax_t end;		// ending tick value
 
     pid_t pid;
+
 
     while (true) {
 
@@ -38,7 +42,8 @@ int main(int argc, char *argv[])
 
         if (is_shell_cmd(args[0])) {
             if (strcmp(args[0], "exit") == 0) {
-                break;
+                free_args(args, total_args);
+                return EXIT_SUCCESS;
             }
 
 
@@ -70,7 +75,17 @@ int main(int argc, char *argv[])
                 execvp(filtered_args[0], filtered_args);
             }
             else {
+                if ((start = times(&t)) < 0) {
+                    perror("times error!");
+                }
                 wait(NULL);
+                if ((end = times(&t)) < 0) {
+                    perror("times error!");
+                }
+
+                printf("elapsed time: %5.2f seconds\n", (double) (end-start)/freq);
+                printf("system time: %ju ticks\n", (uintmax_t) t.tms_stime);
+
                 if (close(pipe_fd[0]) < 0)
                     perror("Pipe close error");
                 if (close(pipe_fd[1] < 0))          
@@ -111,22 +126,15 @@ int prompt_cmd(char *args[MAX_ARGS+1])
     printf("SHELL379: "); 
     fflush(stdout);
 
-    char *arg = calloc(MAX_LENGTH + 1, sizeof(*arg));
+    char *arg;
     do {
+        arg = calloc(MAX_LENGTH + 1, sizeof(*arg));
         scanf("%s", arg);
         args[arg_i++] = arg;
-        arg = calloc(MAX_LENGTH + 1, sizeof(*arg));
 
-        ch = getchar();
-
-    } while (ch != '\n');
+    } while ((ch = getchar()) != '\n');
 
     args[arg_i] = NULL;
-
-    /*rewind(stdin);*/
-
-    fseek(stdin, 0L, SEEK_SET);
-    clearerr(stdin);
 
 
 
