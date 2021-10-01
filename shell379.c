@@ -298,7 +298,8 @@ void proc_exit(int signum)
     pid_t pid;
 
     while (true) {
-        pid = wait3(NULL, WNOHANG, (struct rusage *) NULL);
+        /*pid = wait3(NULL, WNOHANG, (struct rusage *) NULL);*/
+        pid = waitpid((pid_t) -1, NULL, WNOHANG);
         if (pid == 0)
             return;
         else if (pid == -1)
@@ -326,9 +327,7 @@ int find_proc_index(struct process *ptable[MAX_PT_ENTRIES], unsigned int num_act
 void free_proc(struct process *ptable[MAX_PT_ENTRIES], int pindex)
 {
     free_args(ptable[pindex]->args, ptable[pindex]->total_args);
-    printf("Freed args\n");
     free(ptable[pindex]);
-    printf("Freed proc\n");
 
     // shift existing proc
     int i;
@@ -340,14 +339,6 @@ void free_proc(struct process *ptable[MAX_PT_ENTRIES], int pindex)
     num_active_p--;
 }
 
-
-void args_tostr(char **args, char *args_str, int total_args)
-{
-    strcpy(args_str, args[0]);
-    for (int i=1; i<total_args; i++) {
-        strcat(args_str, args[i]);
-    }
-}
 
 
 
