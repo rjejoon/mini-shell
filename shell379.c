@@ -69,17 +69,35 @@ int main(int argc, char *argv[])
                 free_args(args, total_args);
             }
 
+            if (strcmp(args[0], "kill") == 0) {
+                pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
+                kill(target_pid, SIGKILL);
+                free_args(args, total_args);
+            }
+
+            if (strcmp(args[0], "resume") == 0) {
+                pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
+                kill(target_pid, SIGCONT);
+                free_args(args, total_args);
+            }
+
             if (strcmp(args[0], "sleep") == 0) {
                 long int seconds = strtol(args[1], NULL, 10);
                 sleep(seconds);
                 free_args(args, total_args);
             }
 
-            if (strcmp(args[0], "kill") == 0) {
+            if (strcmp(args[0], "suspend") == 0) {
                 pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
-                kill(target_pid, SIGKILL);
+                kill(target_pid, SIGSTOP);
+                free_args(args, total_args);
             }
 
+            if (strcmp(args[0], "wait") == 0) {
+                pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
+                waitpid(target_pid, NULL, 0);
+                free_args(args, total_args);
+            }
 
         } else {
             char *rin_fname = get_input_redirection_fname(args);
