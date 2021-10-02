@@ -17,16 +17,13 @@
 #include "shell379.h"
 
 
-
 struct process *ptable[MAX_PT_ENTRIES];
-unsigned int num_active_p = 0;
-
+unsigned int num_active_p;
 
 int main(int argc, char *argv[])
 {
     // TODO for now assume the args are valid
 
-    /*char cmd[MAX_LENGTH];*/
     char **args;
     int total_args;
 
@@ -43,6 +40,8 @@ int main(int argc, char *argv[])
 
 
     pid_t pid;
+
+    num_active_p = 0;
 
 
     while (true) {
@@ -62,32 +61,13 @@ int main(int argc, char *argv[])
             }
 
             if (strcmp(args[0], "jobs") == 0) {
-                printf("\n");
-                printf("Running processes:\n");
-                if (num_active_p > 0) {
-                    printf(" #    PID S SEC COMMAND\n");
-                    for (int i=0; i<num_active_p; i++) {
-                        printf(" %d: %5d R %3d ", i, ptable[i]->pid, 0);        // TODO SEC
-
-                        // print args
-                        for (int j=0; j<ptable[i]->total_args; j++) 
-                            printf(" %s", ptable[i]->args[j]);
-                        printf("\n");
-                    }
-                }
-                printf("Processes = %6d active\n", num_active_p);
-                printf("Completed processes:\n");
-                printf("User time = %6d seconds\n", (int) total_user_time);
-                printf("Sys  time = %6d seconds\n", (int) total_sys_time);
-                printf("\n");
-
+                jobs_cmd(ptable, num_active_p);
                 free_args(args, total_args);
             }
 
             if (strcmp(args[0], "sleep") == 0) {
                 long int seconds = strtol(args[1], NULL, 10);
                 sleep(seconds);
-
                 free_args(args, total_args);
             }
 
@@ -100,7 +80,8 @@ int main(int argc, char *argv[])
             char *filtered_args[MAX_ARGS+1];
             is_bg_process = remove_redirection_and_bg_args(filtered_args, args, total_args);
 
-            signal(SIGCHLD, proc_exit);
+            // TODO handle SIGCHLD
+            /*signal(SIGCHLD, proc_exit_handler);*/
 
             int pipe_fd[2];
             if (pipe(pipe_fd) < 0)      // create pipe before forking a child
@@ -216,19 +197,6 @@ void free_args(char **args, int total_args)
 }
     
 
-bool is_shell_cmd(char *cmd)
-{
-    char *shell_cmds[] = {"exit", "jobs", "kill", "resume", "sleep", "suspend", "wait"};
-    int len = sizeof(shell_cmds) / sizeof(shell_cmds[0]);
-
-    for (int i=0; i<len; i++) {
-        if (strcmp(cmd, shell_cmds[i]) == 0)
-            return true;
-    }
-    return false;
-
-}
-
 char *get_input_redirection_fname(char **args)
 {
     for (int i=1; (i<MAX_ARGS+1) && (args[i] != NULL); i++) {
@@ -291,57 +259,3 @@ void redirect_output(char *rout_fname)
     }
     close(output_fds);
 }
-
-
-void proc_exit(int signum)
-{
-    pid_t pid;
-
-    while (true) {
-        /*pid = wait3(NULL, WNOHANG, (struct rusage *) NULL);*/
-        pid = waitpid((pid_t) -1, NULL, WNOHANG);
-        if (pid == 0)
-            return;
-        else if (pid == -1)
-            return;
-        else {
-            int pindex = find_proc_index(ptable, num_active_p, pid);
-            free_proc(ptable, pindex);
-            printf ("pid: %d finished \n", pid);
-        }
-    }
-
-}
-
-int find_proc_index(struct process *ptable[MAX_PT_ENTRIES], unsigned int num_active_p, pid_t pid)
-{
-    for (int i=0; i<num_active_p; i++) {
-        if (ptable[i]->pid == pid)
-            return i;
-    }
-
-    return -1;
-}
-
-
-void free_proc(struct process *ptable[MAX_PT_ENTRIES], int pindex)
-{
-    free_args(ptable[pindex]->args, ptable[pindex]->total_args);
-    free(ptable[pindex]);
-
-    // shift existing proc
-    int i;
-    for (i=pindex; i<num_active_p-1; i++) {
-        ptable[i] = ptable[i+1];
-    }
-    ptable[i] = NULL;       // remove the last one 
-
-    num_active_p--;
-}
-
-
-
-
-
-
-
