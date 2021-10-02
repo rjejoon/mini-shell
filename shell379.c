@@ -40,13 +40,10 @@ int main(int argc, char *argv[])
     double total_user_time = 0;
     double total_sys_time = 0;
 
-
     pid_t pid;
-
     num_active_p = 0;
 
-    printf("Parent ppid = %d\n", getpid());
-
+    printf("Parent ppid = %d\n", getpid());     // TODO delete later
 
     while (true) {
 
@@ -64,38 +61,49 @@ int main(int argc, char *argv[])
                 return EXIT_SUCCESS;
             }
 
-            if (strcmp(args[0], "jobs") == 0) {
+            else if (strcmp(args[0], "jobs") == 0) {
                 jobs_cmd(ptable, num_active_p);
                 free_args(args, total_args);
             }
 
-            if (strcmp(args[0], "kill") == 0) {
+            else if (strcmp(args[0], "kill") == 0) {
                 pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
                 kill(target_pid, SIGKILL);
                 free_args(args, total_args);
             }
 
-            if (strcmp(args[0], "resume") == 0) {
+            else if (strcmp(args[0], "resume") == 0) {
                 pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
                 kill(target_pid, SIGCONT);
                 free_args(args, total_args);
             }
 
-            if (strcmp(args[0], "sleep") == 0) {
+            else if (strcmp(args[0], "sleep") == 0) {
                 long int seconds = strtol(args[1], NULL, 10);
                 sleep(seconds);
                 free_args(args, total_args);
             }
 
-            if (strcmp(args[0], "suspend") == 0) {
+            else if (strcmp(args[0], "suspend") == 0) {
                 pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
                 kill(target_pid, SIGSTOP);
                 free_args(args, total_args);
             }
 
-            if (strcmp(args[0], "wait") == 0) {
+            else if (strcmp(args[0], "wait") == 0) {
                 pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
-                waitpid(target_pid, NULL, 0);
+                pid_t end_pid;
+                while (true) {
+                    end_pid = waitpid(target_pid, NULL, WNOHANG);
+                    if (end_pid == -1) {            // child not found
+                        perror("wait error!");
+                        break;
+                    } else if (end_pid == 0) {      // child is in process
+                        continue;
+                    } else if (end_pid == target_pid) {     // child ended 
+                        break;
+                    }
+                }
                 free_args(args, total_args);
             }
 
@@ -158,24 +166,15 @@ int main(int argc, char *argv[])
                 printf("Sys time: %f seconds\n", total_sys_time);
                 printf("\n");
 
-
-
                 if (close(pipe_fd[0]) < 0)
                     perror("Pipe close error");
                 if (close(pipe_fd[1] < 0))          
                     perror("Pipe close error");
             }
-
         }
-
     }
 
-
-
     return EXIT_SUCCESS;
-
-    
-
 }
 
 /*
