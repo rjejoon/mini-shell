@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <sys/types.h>
+
 
 #include "shell379.h"
 

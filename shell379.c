@@ -1,16 +1,18 @@
-#include <stdio.h>
+#define _POSIX_SOURCE
+
 #include <string.h>
 #include <stdbool.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <signal.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
 
+#include <sys/types.h>
+#include <signal.h>
+#include <unistd.h>
+#include <stdio.h>
 
 /*#include <sys/times.h>*/
 
@@ -43,6 +45,8 @@ int main(int argc, char *argv[])
 
     num_active_p = 0;
 
+    printf("Parent ppid = %d\n", getpid());
+
 
     while (true) {
 
@@ -55,8 +59,8 @@ int main(int argc, char *argv[])
         if (is_shell_cmd(args[0])) {
 
             if (strcmp(args[0], "exit") == 0) {
+                while (wait(NULL) > 0) ;        // wait for all children to finish
                 free_args(args, total_args);
-                // TODO must kill all the children processes
                 return EXIT_SUCCESS;
             }
 
@@ -69,6 +73,11 @@ int main(int argc, char *argv[])
                 long int seconds = strtol(args[1], NULL, 10);
                 sleep(seconds);
                 free_args(args, total_args);
+            }
+
+            if (strcmp(args[0], "kill") == 0) {
+                pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
+                kill(target_pid, SIGKILL);
             }
 
 
