@@ -34,6 +34,10 @@ void free_proc(struct process *ptable[MAX_PT_ENTRIES], int pindex, int num_activ
 // shell cmds
 bool is_shell_cmd(char *cmd);
 void jobs_cmd(struct process *ptable[MAX_PT_ENTRIES], int num_active_p);
+int run_ps(pid_t pids[MAX_PT_ENTRIES], char *states[MAX_PT_ENTRIES], int times[MAX_PT_ENTRIES]);
+char *trim(char *s);
+char *ltrim(char *s);
+char *rtrim(char *s);
 
 
 #endif
