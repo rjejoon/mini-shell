@@ -23,7 +23,7 @@ int main()
 		perror("open");
 		exit(1);
 	}
-	for (i=0; i < 1000000; i++)
+	for (i=0; i < 500000; i++)
 		read(fd, buf, 2048);
 	close(fd);
 }

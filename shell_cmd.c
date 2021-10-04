@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <ctype.h>
 
 
@@ -26,10 +27,10 @@ bool is_shell_cmd(char *cmd)
 }
 
 
-void jobs_cmd(struct process *ptable[MAX_PT_ENTRIES], int num_active_p) 
+void jobs_cmd(struct process ptable[MAX_PT_ENTRIES], int num_active_p) 
 {
     pid_t pids[MAX_PT_ENTRIES];
-    char *states[MAX_PT_ENTRIES];
+    char states[MAX_PT_ENTRIES][5];
     int times[MAX_PT_ENTRIES];
 
     int ps_num_active_p = run_ps(pids, states, times);
@@ -39,24 +40,23 @@ void jobs_cmd(struct process *ptable[MAX_PT_ENTRIES], int num_active_p)
     if (ps_num_active_p > 0) {
         printf(" #       PID S SEC COMMAND\n");
         for (int i=0; i<ps_num_active_p; i++) {
-            printf("%2d: %8d %s %3d \n", i, pids[i], states[i], times[i]);        
+            printf("%2d: %8d %s %3d", i, pids[i], states[i], times[i]);        
 
-            // TODO  print args
-            /*
-            for (int j=0; j<ptable[i]->total_args; j++)
-                printf(" %s", ptable[i]->args[j]);
+            for (int j=0; j<ptable[i].total_args; j++)
+                printf(" %s", ptable[i].args[j]);
             printf("\n");
-            */
         }
     }
     printf("Processes = %6d active\n", ps_num_active_p);
+
     printf("Completed processes:\n");
+    print_children_cputimes();
     printf("\n");
 
 
 }
 
-int run_ps(pid_t pids[MAX_PT_ENTRIES], char *states[MAX_PT_ENTRIES], int times[MAX_PT_ENTRIES])
+int run_ps(pid_t pids[MAX_PT_ENTRIES], char states[MAX_PT_ENTRIES][5], int times[MAX_PT_ENTRIES])
 {
     pid_t ppid = getpid();
     FILE *p_fp;
@@ -86,7 +86,7 @@ int run_ps(pid_t pids[MAX_PT_ENTRIES], char *states[MAX_PT_ENTRIES], int times[M
         pids[i] = atoi(token);      // store pid
 
         token = trim(strtok_r(trimmed_buf, " ", &trimmed_buf));
-        states[i] = token;          // store state
+        strcpy(states[i], token);
 
         token = trim(strtok_r(trimmed_buf, " ", &trimmed_buf));
         times[i] = atoi(token);     // store time in seconds

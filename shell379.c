@@ -1,6 +1,7 @@
 #define _POSIX_SOURCE
 
 #include <string.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -14,12 +15,11 @@
 #include <unistd.h>
 #include <stdio.h>
 
-/*#include <sys/times.h>*/
-
 #include "shell379.h"
 
 
-struct process *ptable[MAX_PT_ENTRIES];
+// struct process *ptable[MAX_PT_ENTRIES];
+struct process ptable[MAX_PT_ENTRIES];
 unsigned int num_active_p;
 
 int main(int argc, char *argv[])
@@ -33,19 +33,15 @@ int main(int argc, char *argv[])
     int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
 
-    struct rusage usage;    // struct for storing resources used by child process
-    struct timeval user_t;
-    struct timeval sys_t;
-
-    double total_user_time = 0;
-    double total_sys_time = 0;
 
     pid_t pid;
     num_active_p = 0;
 
+
     printf("Parent ppid = %d\n", getpid());     // TODO delete later
 
     while (true) {
+
 
         dup2(stdin_copy, STDIN_FILENO);     // restore stdin
         dup2(stdout_copy, STDOUT_FILENO);   // restore stdout
@@ -53,10 +49,15 @@ int main(int argc, char *argv[])
         args = malloc( (MAX_ARGS + 1) * sizeof(*args) );
         total_args = prompt_cmd(args);
 
+        reap_possible_children();
+
         if (is_shell_cmd(args[0])) {
 
             if (strcmp(args[0], "exit") == 0) {
                 while (wait(NULL) > 0) ;        // wait for all children to finish
+
+                printf("\nResources used\n");
+                print_children_cputimes();
                 free_args(args, total_args);
                 return EXIT_SUCCESS;
             }
@@ -115,8 +116,6 @@ int main(int argc, char *argv[])
             char *filtered_args[MAX_ARGS+1];
             is_bg_process = remove_redirection_and_bg_args(filtered_args, args, total_args);
 
-            // TODO handle SIGCHLD
-            /*signal(SIGCHLD, proc_exit_handler);*/
 
             int pipe_fd[2];
             if (pipe(pipe_fd) < 0)      // create pipe before forking a child
@@ -127,6 +126,10 @@ int main(int argc, char *argv[])
 
             } else if (pid == 0) {          // child
 
+                if (is_bg_process) {
+                    setpgid(0, 0);  
+                }
+
                 if (rin_fname != NULL)
                     redirect_input(rin_fname);
 
@@ -136,35 +139,55 @@ int main(int argc, char *argv[])
                 close(pipe_fd[0]);
                 close(pipe_fd[1]);
 
-                execvp(filtered_args[0], filtered_args);
+                if (execvp(filtered_args[0], filtered_args) < 0) {
+                    perror("exec error!");
+                    _exit(EXIT_FAILURE);
+                }
 
             } else {        // parent
+                // TODO handle SIGCHLD
+                signal(SIGCHLD, proc_exit_handler);
 
-                struct process *proc = malloc(sizeof(*proc));
-                proc->pid = pid;
-                proc->args = args;
-                proc->total_args = total_args;
+                struct process proc;
+                proc.pid = pid;
+                copy_args(proc.args, args);
+                proc.total_args = total_args;
+
+                /*
+                printf("#: %d\n", num_active_p);
+                printf("cmd:");
+                for (int i=0; i<proc.total_args; i++)
+                    printf(" %s", proc.args[i]);
+                printf("\n");
+                */
 
                 ptable[num_active_p++] = proc;      // add proc to process table
 
-                printf("pid: %d start\n", pid);
+                free_args(args, total_args);
 
+                if (!is_bg_process) {
+                    // wait for the child to finish
+                    while (true) {
+                        pid_t pid = waitpid(-1, NULL, 0);
+                        if (pid == 0)
+                            break;
+                        else if (pid == -1)
+                            break;
+                        else {
+                            int pindex = find_proc_index(ptable, num_active_p, pid);
+                            // free_proc(ptable, pindex, num_active_p);
+                            
+                            // shift existing proc
+                            for (int i=pindex; i<num_active_p-1; i++) 
+                                ptable[i] = ptable[i+1];
+                            num_active_p--;
 
-                if (!is_bg_process)
-                    wait(NULL);         
+                            printf ("pid: %d finished \n", pid);
+                            break;
+                        }
 
-                getrusage(RUSAGE_CHILDREN, &usage);
-                user_t = usage.ru_utime;
-                sys_t = usage.ru_stime;
-
-                // TODO Corretly update total times
-                total_user_time += user_t.tv_sec + ((double) user_t.tv_usec)/1000000;
-                total_sys_time += sys_t.tv_sec + ((double) sys_t.tv_usec)/1000000;
-
-                printf("\n");
-                printf("User time: %f seconds\n", total_user_time);
-                printf("Sys time: %f seconds\n", total_sys_time);
-                printf("\n");
+                    }
+                }
 
                 if (close(pipe_fd[0]) < 0)
                     perror("Pipe close error");
@@ -172,9 +195,41 @@ int main(int argc, char *argv[])
                     perror("Pipe close error");
             }
         }
+
+        reap_possible_children();
     }
 
     return EXIT_SUCCESS;
+}
+
+void copy_args(char dest[MAX_ARGS+1][MAX_LENGTH+1], char **args)
+{
+    for (int i=0; args[i] != NULL; i++) 
+        strcpy(dest[i], args[i]);
+}
+
+void reap_possible_children() 
+{
+    while (true) {
+        pid_t pid = waitpid(-1, NULL, WNOHANG);
+        if (pid == 0)
+            break;
+        else if (pid == -1)
+            break;
+        else {
+            int pindex = find_proc_index(ptable, num_active_p, pid);
+            // free_proc(ptable, pindex, num_active_p);
+            
+            // shift existing proc
+            for (int i=pindex; i<num_active_p-1; i++) 
+                ptable[i] = ptable[i+1];
+            num_active_p--;
+
+            printf ("pid: %d finished \n", pid);
+        }
+
+    }
+
 }
 
 /*
@@ -209,7 +264,6 @@ int prompt_cmd(char **args)
     args[arg_i] = NULL;
 
 
-
     return arg_i;
 }
 
@@ -230,7 +284,6 @@ char *get_input_redirection_fname(char **args)
             return args[i] + 1;
         }
     }
-
     return NULL;
 }
 
@@ -241,7 +294,6 @@ char *get_output_redirection_fname(char **args)
             return args[i] + 1;
         }
     }
-
     return NULL;
 }
 
@@ -284,4 +336,88 @@ void redirect_output(char *rout_fname)
         _exit(EXIT_FAILURE);
     }
     close(output_fds);
+}
+
+
+void proc_exit_handler(int signum)
+{
+    /*
+    pid_t pids[MAX_PT_ENTRIES];
+    char *states[MAX_PT_ENTRIES];
+    int times[MAX_PT_ENTRIES];
+
+    int ps_num_active_p = run_ps(pids, states, times);
+
+    printf("%d %d\n", num_active_p, ps_num_active_p);
+    for (int i=0; i<num_active_p; i++) {
+        bool found_pid = false;
+
+        // find pid in ptable from pids in ps
+        for (int j=0; j<ps_num_active_p; j++) {
+            if (ptable[i] == pids[j]) {
+                found_pid = true;
+                break;
+            }
+        }
+        if (!found_pid) {
+            // shift existing proc
+            for (int pindex=i; pindex<num_active_p-1; pindex++) 
+                ptable[pindex] = ptable[pindex+1];
+            num_active_p--;
+
+            printf ("pid: %d finished \n", ptable[i]);
+            return;
+        }
+    }
+    */
+
+    pid_t pid;
+
+    while (true) {
+        pid = waitpid((pid_t) -1, NULL, WNOHANG);
+        if (pid == 0)
+            return;
+        else if (pid == -1)
+            return;
+        else {
+            int pindex = find_proc_index(ptable, num_active_p, pid);
+            // free_proc(ptable, pindex, num_active_p);
+            
+            // shift existing proc
+            for (int i=pindex; i<num_active_p-1; i++) 
+                ptable[i] = ptable[i+1];
+            num_active_p--;
+
+            // printf("pid: %d finished \n", pid);
+            return;
+        }
+    }
+
+}
+
+
+void print_children_cputimes()
+{
+    struct rusage usage;    // struct for storing resources used by child process
+    struct timeval user_t;
+    struct timeval sys_t;
+
+    long total_user_time;
+    long total_sys_time;
+
+    // print total user & sys time used by all children
+    getrusage(RUSAGE_CHILDREN, &usage);
+    user_t = usage.ru_utime;
+    sys_t = usage.ru_stime;
+
+    total_user_time = user_t.tv_sec;
+    if ((double) user_t.tv_usec/1000000 >= 0.5)
+        total_user_time++;
+
+    total_sys_time = sys_t.tv_sec;
+    if ((double) sys_t.tv_usec/1000000 >= 0.5)
+        total_sys_time++;
+
+    printf("User time: %ld seconds\n", total_user_time);
+    printf("Sys time: %ld seconds\n", total_sys_time);
 }
