@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <unistd.h>
+#include <sys/types.h>
 
 #define LINE_LENGTH 100     // Max # of characters in an input file
 #define MAX_ARGS 7          // Max # of args to a command

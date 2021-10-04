@@ -449,5 +449,5 @@ void print_children_cputimes(void)
         total_sys_time++;
 
     printf("User time: %6ld seconds\n", total_user_time);
-    printf("Sys time: %6ld seconds\n", total_sys_time);
+    printf("Sys  time: %6ld seconds\n", total_sys_time);
 }
