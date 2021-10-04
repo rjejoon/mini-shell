@@ -448,6 +448,6 @@ void print_children_cputimes(void)
     if ((double) sys_t.tv_usec/1000000 >= 0.5)
         total_sys_time++;
 
-    printf("User time: %ld seconds\n", total_user_time);
-    printf("Sys time: %ld seconds\n", total_sys_time);
+    printf("User time: %6ld seconds\n", total_user_time);
+    printf("Sys time: %6ld seconds\n", total_sys_time);
 }
