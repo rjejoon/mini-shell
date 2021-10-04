@@ -1,4 +1,6 @@
-#define _POSIX_SOURCE
+#if !(defined(__APPLE__) && defined(__MACH__))
+    #define _POSIX_SOURCE
+#endif
 #define _DEFAULT_SOURCE
 
 #include <stdio.h>
@@ -12,7 +14,18 @@
 #include "shell379.h"
 
 
-
+/*
+ * Function: is_shell_cmd 
+ * -----------------------------------
+ *      Return true if cmd is shell379 cmd and false if not.
+ *
+ *  Inputs:
+ *      cmd: char *
+ *
+ *  Returns:
+ *      bool
+ *
+ */
 bool is_shell_cmd(char *cmd)
 {
     char *shell_cmds[] = {"exit", "jobs", "kill", "resume", "sleep", "suspend", "wait"};
@@ -27,6 +40,17 @@ bool is_shell_cmd(char *cmd)
 }
 
 
+/*
+ * Function: jobs_cmd 
+ * -----------------------------------
+ *      Displays currently active children processes and 
+ *      cumulative used user and sys times by all children processes.
+ *
+ *  Inputs:
+ *      ptable: process table
+ *      num_active_p: total # of processes in process table
+ *
+ */
 void jobs_cmd(struct process ptable[MAX_PT_ENTRIES], int num_active_p) 
 {
     pid_t pids[MAX_PT_ENTRIES];
@@ -52,10 +76,25 @@ void jobs_cmd(struct process ptable[MAX_PT_ENTRIES], int num_active_p)
     printf("Completed processes:\n");
     print_children_cputimes();
     printf("\n");
-
-
 }
 
+
+/*
+ * Function: run_ps 
+ * -----------------------------------
+ *      Runs "ps" command in child process and stores information about 
+ *      all children processes forked by the parent.
+ *      Returns the number of children processes found in "ps".
+ *
+ *  Inputs:
+ *      pids: pid_t array
+ *      states: char *array
+ *      times: int array
+ *
+ *  Return:
+ *      # of children processes found in ps command in int.
+ *
+ */
 int run_ps(pid_t pids[MAX_PT_ENTRIES], char states[MAX_PT_ENTRIES][5], int times[MAX_PT_ENTRIES])
 {
     pid_t ppid = getpid();

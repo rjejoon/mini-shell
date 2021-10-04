@@ -1,3 +1,6 @@
+#if !(defined(__APPLE__) && defined(__MACH__))
+    #define _POSIX_SOURCE
+#endif
 #define _POSIX_SOURCE
 
 #include <string.h>
@@ -18,7 +21,6 @@
 #include "shell379.h"
 
 
-// struct process *ptable[MAX_PT_ENTRIES];
 struct process ptable[MAX_PT_ENTRIES];
 unsigned int num_active_p;
 
@@ -29,19 +31,14 @@ int main(int argc, char *argv[])
     char **args;
     int total_args;
 
-
+    // copies of stdin and stdout
     int stdin_copy = dup(STDIN_FILENO);
     int stdout_copy = dup(STDOUT_FILENO);
-
 
     pid_t pid;
     num_active_p = 0;
 
-
-    printf("Parent ppid = %d\n", getpid());     // TODO delete later
-
     while (true) {
-
 
         dup2(stdin_copy, STDIN_FILENO);     // restore stdin
         dup2(stdout_copy, STDOUT_FILENO);   // restore stdout
@@ -49,7 +46,7 @@ int main(int argc, char *argv[])
         args = malloc( (MAX_ARGS + 1) * sizeof(*args) );
         total_args = prompt_cmd(args);
 
-        reap_possible_children();
+        reap_possible_children();           // reap chlid proc right after the prompt
 
         if (is_shell_cmd(args[0])) {
 
@@ -93,9 +90,8 @@ int main(int argc, char *argv[])
 
             else if (strcmp(args[0], "wait") == 0) {
                 pid_t target_pid = (pid_t) strtol(args[1], NULL, 10);
-                pid_t end_pid;
                 while (true) {
-                    end_pid = waitpid(target_pid, NULL, WNOHANG);
+                    pid_t end_pid = waitpid(target_pid, NULL, 0);
                     if (end_pid == -1) {            // child not found
                         perror("wait error!");
                         break;
@@ -108,7 +104,7 @@ int main(int argc, char *argv[])
                 free_args(args, total_args);
             }
 
-        } else {
+        } else {     
             char *rin_fname = get_input_redirection_fname(args);
             char *rout_fname = get_output_redirection_fname(args);
             bool is_bg_process;
@@ -126,68 +122,43 @@ int main(int argc, char *argv[])
 
             } else if (pid == 0) {          // child
 
-                if (is_bg_process) {
-                    setpgid(0, 0);  
-                }
+                if (is_bg_process)
+                    setpgid(0, 0);          // make new process group and set child as a leader
 
-                if (rin_fname != NULL)
+                if (rin_fname)
                     redirect_input(rin_fname);
 
-                if (rout_fname != NULL)
+                if (rout_fname)
                     redirect_output(rout_fname);
 
-                close(pipe_fd[0]);
-                close(pipe_fd[1]);
+                if (close(pipe_fd[0]) < 0)
+                    perror("Pipe close error in child process");
+                if (close(pipe_fd[1] < 0))          
+                    perror("Pipe close error in child process");
 
                 if (execvp(filtered_args[0], filtered_args) < 0) {
-                    perror("exec error!");
+                    char err_msg[100];
+                    sprintf(err_msg, "Failed to execute '%s'", filtered_args[0]);
+                    perror(err_msg);
                     _exit(EXIT_FAILURE);
                 }
 
             } else {        // parent
-                // TODO handle SIGCHLD
-                signal(SIGCHLD, proc_exit_handler);
-
-                struct process proc;
-                proc.pid = pid;
-                copy_args(proc.args, args);
-                proc.total_args = total_args;
-
-                /*
-                printf("#: %d\n", num_active_p);
-                printf("cmd:");
-                for (int i=0; i<proc.total_args; i++)
-                    printf(" %s", proc.args[i]);
-                printf("\n");
-                */
-
-                ptable[num_active_p++] = proc;      // add proc to process table
-
-                free_args(args, total_args);
+                signal(SIGCHLD, proc_exit_handler);     // catch SIGCHLD signal
 
                 if (!is_bg_process) {
-                    // wait for the child to finish
-                    while (true) {
-                        pid_t pid = waitpid(-1, NULL, 0);
-                        if (pid == 0)
-                            break;
-                        else if (pid == -1)
-                            break;
-                        else {
-                            int pindex = find_proc_index(ptable, num_active_p, pid);
-                            // free_proc(ptable, pindex, num_active_p);
-                            
-                            // shift existing proc
-                            for (int i=pindex; i<num_active_p-1; i++) 
-                                ptable[i] = ptable[i+1];
-                            num_active_p--;
-
-                            printf ("pid: %d finished \n", pid);
-                            break;
-                        }
-
-                    }
+                    // wait for the child to finish and remove it from process table
+                    waitpid(pid, NULL, 0);
+                } else {
+                    // add proc to process table
+                    struct process proc;
+                    proc.pid = pid;
+                    copy_args(proc.args, args);
+                    proc.total_args = total_args;
+                    ptable[num_active_p++] = proc;      
                 }
+
+                free_args(args, total_args);
 
                 if (close(pipe_fd[0]) < 0)
                     perror("Pipe close error");
@@ -202,35 +173,6 @@ int main(int argc, char *argv[])
     return EXIT_SUCCESS;
 }
 
-void copy_args(char dest[MAX_ARGS+1][MAX_LENGTH+1], char **args)
-{
-    for (int i=0; args[i] != NULL; i++) 
-        strcpy(dest[i], args[i]);
-}
-
-void reap_possible_children() 
-{
-    while (true) {
-        pid_t pid = waitpid(-1, NULL, WNOHANG);
-        if (pid == 0)
-            break;
-        else if (pid == -1)
-            break;
-        else {
-            int pindex = find_proc_index(ptable, num_active_p, pid);
-            // free_proc(ptable, pindex, num_active_p);
-            
-            // shift existing proc
-            for (int i=pindex; i<num_active_p-1; i++) 
-                ptable[i] = ptable[i+1];
-            num_active_p--;
-
-            printf ("pid: %d finished \n", pid);
-        }
-
-    }
-
-}
 
 /*
  * Function: prompt_cmd 
@@ -263,20 +205,74 @@ int prompt_cmd(char **args)
 
     args[arg_i] = NULL;
 
-
     return arg_i;
+}
+
+
+/*
+ * Function: copy_args 
+ * -----------------------------------
+ *      Hard copy args in source to destination.
+ *
+ *  Inputs:
+ *      dest: where the copied args will go 
+ *      source_args: args to be copied
+ *
+ */
+void copy_args(char dest[MAX_ARGS+1][MAX_LENGTH+1], char **source_args)
+{
+    for (int i=0; source_args[i] != NULL; i++) 
+        strcpy(dest[i], source_args[i]);
 }
 
 
 void free_args(char **args, int total_args) 
 {
-    for (int i=0; i<total_args; i++) {
+    for (int i=0; i<total_args; i++)
         free(args[i]);
-    }
     free(args);
 }
-    
 
+
+/*
+ * Function: reap_possible_children
+ * -----------------------------------
+ *      Reap all possible children processes and remove corresponding processes in the process table
+ *
+ */
+void reap_possible_children() 
+{
+    while (true) {
+        pid_t pid = waitpid(-1, NULL, WNOHANG);
+        if (pid == 0)
+            break;
+        else if (pid == -1)
+            break;
+        else {
+            int pindex = find_proc_index(ptable, num_active_p, pid);
+            
+            // shift existing proc
+            for (int i=pindex; i<num_active_p-1; i++) 
+                ptable[i] = ptable[i+1];
+            num_active_p--;
+        }
+    }
+}
+
+
+/*
+ * Function: get_input_redirection_fname 
+ * -----------------------------------
+ *      Return the file name for input redirection 
+ *      Return a null pointer if it does not exist.
+ *
+ *  Inputs:
+ *      args: args to be searched
+ *
+ *  Returns:
+ *      char *: file name
+ *
+ */
 char *get_input_redirection_fname(char **args)
 {
     for (int i=1; (i<MAX_ARGS+1) && (args[i] != NULL); i++) {
@@ -287,6 +283,20 @@ char *get_input_redirection_fname(char **args)
     return NULL;
 }
 
+
+/*
+ * Function: get_output_redirection_fname 
+ * -----------------------------------
+ *      Return the file name for output redirection. 
+ *      Return a null pointer if it does not exist.
+ *
+ *  Inputs:
+ *      args: args to be searched
+ *
+ *  Returns:
+ *      char *: file name
+ *
+ */
 char *get_output_redirection_fname(char **args)
 {
     for (int i=1; (i<MAX_ARGS+1) && (args[i] != NULL); i++) {
@@ -298,6 +308,21 @@ char *get_output_redirection_fname(char **args)
 }
 
 
+/*
+ * Function: remove_redirection_and_bg_args 
+ * -----------------------------------
+ *      Copy the pointers of all args execept for the redirection args and &. Then store them in filtered_args.
+ *      Return true if the user wants to have the process running in backround.
+ *
+ *  Inputs:
+ *      filtered_args: filtered args ptrs to be stored
+ *      args: original args
+ *      total_args: # of original args
+ *
+ *  Returns:
+ *      is_bg: bool
+ *
+ */
 bool remove_redirection_and_bg_args(char *filtered_args[MAX_ARGS+1], char **args, int total_args)
 {
     int i, j;
@@ -315,6 +340,16 @@ bool remove_redirection_and_bg_args(char *filtered_args[MAX_ARGS+1], char **args
     return is_bg;
 }
 
+
+/*
+ * Function: redirect_input 
+ * -----------------------------------
+ *      Redirect stdin to rin_fname
+ *
+ *  Inputs:
+ *      rin_fname: file name
+ *
+ */
 void redirect_input(char *rin_fname)
 {
     int input_fds;
@@ -326,6 +361,16 @@ void redirect_input(char *rin_fname)
     close(input_fds);
 }
 
+
+/*
+ * Function: redirect_output 
+ * -----------------------------------
+ *      Redirect stdout to rin_fname
+ *
+ *  Inputs:
+ *      rin_fname: file name
+ *
+ */
 void redirect_output(char *rout_fname)
 {
     int output_fds;
@@ -339,56 +384,35 @@ void redirect_output(char *rout_fname)
 }
 
 
+/*
+ * Function: proc_exit_handler 
+ * -----------------------------------
+ *      SIGCHLD signal handler.
+ *      Reap a terminated child process and remove it from the process table.
+ *
+ *  Inputs:
+ *      signum: int
+ *
+ */
 void proc_exit_handler(int signum)
 {
-    /*
-    pid_t pids[MAX_PT_ENTRIES];
-    char *states[MAX_PT_ENTRIES];
-    int times[MAX_PT_ENTRIES];
-
-    int ps_num_active_p = run_ps(pids, states, times);
-
-    printf("%d %d\n", num_active_p, ps_num_active_p);
-    for (int i=0; i<num_active_p; i++) {
-        bool found_pid = false;
-
-        // find pid in ptable from pids in ps
-        for (int j=0; j<ps_num_active_p; j++) {
-            if (ptable[i] == pids[j]) {
-                found_pid = true;
-                break;
-            }
-        }
-        if (!found_pid) {
-            // shift existing proc
-            for (int pindex=i; pindex<num_active_p-1; pindex++) 
-                ptable[pindex] = ptable[pindex+1];
-            num_active_p--;
-
-            printf ("pid: %d finished \n", ptable[i]);
-            return;
-        }
-    }
-    */
-
     pid_t pid;
 
     while (true) {
         pid = waitpid((pid_t) -1, NULL, WNOHANG);
-        if (pid == 0)
-            return;
-        else if (pid == -1)
+        if (pid == 0)           // child still in progress
+            ;
+        else if (pid == -1)     // child does not exist
             return;
         else {
+            // found terminated child
             int pindex = find_proc_index(ptable, num_active_p, pid);
-            // free_proc(ptable, pindex, num_active_p);
             
             // shift existing proc
             for (int i=pindex; i<num_active_p-1; i++) 
                 ptable[i] = ptable[i+1];
             num_active_p--;
 
-            // printf("pid: %d finished \n", pid);
             return;
         }
     }
@@ -396,7 +420,13 @@ void proc_exit_handler(int signum)
 }
 
 
-void print_children_cputimes()
+/*
+ * Function: print_children_cputimes
+ * -----------------------------------
+ *      Print cumulative user and sys times used by all children processes.
+ *
+ */
+void print_children_cputimes(void)
 {
     struct rusage usage;    // struct for storing resources used by child process
     struct timeval user_t;
