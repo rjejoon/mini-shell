@@ -355,7 +355,7 @@ void redirect_input(char *rin_fname)
     int input_fds;
     input_fds = open(rin_fname, O_RDONLY);
     if (dup2(input_fds, STDIN_FILENO) < 0) {
-        perror("input dup2 error");
+        perror("Input redirection error");
         _exit(EXIT_FAILURE);
     }
     close(input_fds);
@@ -377,7 +377,7 @@ void redirect_output(char *rout_fname)
     int mode = S_IRUSR | S_IWUSR;
     output_fds = creat(rout_fname, mode);
     if (dup2(output_fds, STDOUT_FILENO) < 0) {
-        perror("output dup2 error");
+        perror("Output redirection error");
         _exit(EXIT_FAILURE);
     }
     close(output_fds);
@@ -448,6 +448,6 @@ void print_children_cputimes(void)
     if ((double) sys_t.tv_usec/1000000 >= 0.5)
         total_sys_time++;
 
-    printf("User time: %6ld seconds\n", total_user_time);
-    printf("Sys  time: %6ld seconds\n", total_sys_time);
+    printf("User time = %6ld seconds\n", total_user_time);
+    printf("Sys  time = %6ld seconds\n", total_sys_time);
 }
